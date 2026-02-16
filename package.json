@@ -33,6 +33,7 @@
     "README.md"
   ],
   "scripts": {
+    "prepare": "tsup",
     "build": "tsup",
     "test": "NODE_OPTIONS='--max-old-space-size=4096' vitest run",
     "test:watch": "vitest",
