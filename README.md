@@ -931,23 +931,36 @@ console.log(`Assignments: ${clusters.assignments}`);
 
 If you use TNA in your research, please cite:
 
-> Saqr, M., Lopez-Pernas, S., Helske, S., & Murphy, S. (2023). *How to analyze complex learning processes: The Transition Network Analysis (TNA) package for R*. R package version 1.2.0. https://cran.r-project.org/package=TNA
+> Saqr, M., Lopez-Pernas, S., Tormanen, T., Kaliisa, R., Misiejuk, K., & Tikka, S. (2025). Transition Network Analysis: A Novel Framework for Modeling, Visualizing, and Identifying the Temporal Patterns of Learners and Learning Processes. In *Proceedings of the 15th International Learning Analytics and Knowledge Conference (LAK '25)*, 351-361. https://doi.org/10.1145/3706468.3706513
 
 ```bibtex
-@manual{saqr2023tna,
-  title     = {TNA: Transition Network Analysis},
-  author    = {Saqr, Mohammed and Lopez-Pernas, Sonsoles and Helske, Satu and Murphy, Shane},
-  year      = {2023},
-  note      = {R package version 1.2.0},
-  url       = {https://cran.r-project.org/package=TNA},
+@inproceedings{saqr2025tna,
+  title     = {Transition Network Analysis: A Novel Framework for Modeling,
+               Visualizing, and Identifying the Temporal Patterns of Learners
+               and Learning Processes},
+  author    = {Saqr, Mohammed and L{\'o}pez-Pernas, Sonsoles and
+               T{\"o}rm{\"a}nen, Tiina and Kaliisa, Rogers and
+               Misiejuk, Kamila and Tikka, Santtu},
+  booktitle = {Proceedings of the 15th International Learning Analytics
+               and Knowledge Conference (LAK '25)},
+  pages     = {351--361},
+  year      = {2025},
+  publisher = {Association for Computing Machinery},
+  doi       = {10.1145/3706468.3706513},
 }
 ```
 
 **Key references:**
 
-- Saqr, M., Lopez-Pernas, S., Helske, S., & Murphy, S. (2025). Transition Network Analysis: A Novel Framework for Modeling, Visualizing, and Identifying the Temporal Patterns of Learners and Learning. *Journal of Learning Analytics*. https://doi.org/10.18608/jla.2025.8382
+- Saqr, M., Lopez-Pernas, S., Tormanen, T., Kaliisa, R., Misiejuk, K., & Tikka, S. (2025). Transition Network Analysis: A Novel Framework for Modeling, Visualizing, and Identifying the Temporal Patterns of Learners and Learning Processes. In *Proceedings of LAK '25*, 351-361. https://doi.org/10.1145/3706468.3706513
 
-- Saqr, M., & Lopez-Pernas, S. (2021). The longitudinal trajectories of online engagement over a full program. *Computers & Education*, 175, 104325. https://doi.org/10.1016/j.compedu.2021.104325
+- Tikka, S., Lopez-Pernas, S., & Saqr, M. (2025). tna: An R Package for Transition Network Analysis. *Applied Psychological Measurement*. https://doi.org/10.1177/01466216251348840
+
+- Saqr, M., Lopez-Pernas, S., & Tikka, S. (2025). Mapping relational dynamics with transition network analysis: A primer and tutorial. In *Advanced Learning Analytics Methods: AI, Precision and Complexity*. Springer.
+
+- Saqr, M., Lopez-Pernas, S., & Tikka, S. (2025). Capturing the breadth and dynamics of the temporal process with frequency transition network analysis. In *Advanced Learning Analytics Methods: AI, Precision and Complexity*. Springer.
+
+- Lopez-Pernas, S., Tikka, S., & Saqr, M. (2025). Mining patterns and clusters with transition network analysis: A heterogeneity approach. In *Advanced Learning Analytics Methods: AI, Precision and Complexity*. Springer.
 
 ---
 
