@@ -245,6 +245,96 @@
       display: none;
     }
 
+    /* ─── Intro Section ─── */
+    .intro {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px 20px 0;
+    }
+
+    .intro-inner {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 20px 28px;
+    }
+
+    .intro p {
+      font-size: 14px;
+      line-height: 1.65;
+      color: #444;
+      margin-bottom: 10px;
+    }
+
+    .intro p:last-child {
+      margin-bottom: 0;
+    }
+
+    .intro a {
+      color: #4e79a7;
+      text-decoration: none;
+    }
+
+    .intro a:hover {
+      text-decoration: underline;
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      background: #1a1a2e;
+      color: #ccc;
+      margin-top: 32px;
+      padding: 32px 20px 28px;
+    }
+
+    .footer-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr 2fr;
+      gap: 32px;
+    }
+
+    .footer-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8899aa;
+      margin-bottom: 10px;
+    }
+
+    .footer-section p {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .footer-section ul,
+    .footer-section ol {
+      font-size: 13px;
+      line-height: 1.7;
+      padding-left: 18px;
+    }
+
+    .footer-section a {
+      color: #7aaddb;
+      text-decoration: none;
+    }
+
+    .footer-section a:hover {
+      text-decoration: underline;
+      color: #a0cbef;
+    }
+
+    .footer-section ol li {
+      margin-bottom: 8px;
+    }
+
+    .footer-section em {
+      font-style: italic;
+      color: #aaa;
+    }
+
     /* ─── Tooltip ─── */
     .tooltip {
       position: fixed;
@@ -266,6 +356,27 @@
     <h1>TNA.js Interactive Demo</h1>
     <p>Transition Network Analysis in the browser</p>
   </header>
+
+  <section class="intro">
+    <div class="intro-inner">
+      <p>
+        This is an interactive demo of <a href="https://github.com/mohsaqr/tna-js" target="_blank"><strong>tnaj</strong></a>,
+        a pure TypeScript/JavaScript implementation of <strong>Transition Network Analysis (TNA)</strong>.
+        TNA is a novel framework for modeling, visualizing, and identifying temporal patterns in sequential data.
+        It represents sequences as weighted directed networks where nodes are states and edges are transitions,
+        enabling the application of network science methods (centralities, community detection, pruning) to
+        understand the structure and dynamics of sequential processes.
+      </p>
+      <p>
+        The package runs entirely in the browser with zero server-side dependencies.
+        It is a port of the
+        <a href="https://cran.r-project.org/package=TNA" target="_blank">R TNA package</a> and the
+        <a href="https://github.com/mohsaqr/tnapy" target="_blank">Python tna package</a>,
+        validated for numerical equivalence with R to machine epsilon (~10<sup>-15</sup>).
+        Use the controls below to explore different model types, pruning thresholds, and community detection methods.
+      </p>
+    </div>
+  </section>
 
   <main>
     <!-- Controls Sidebar -->
@@ -356,6 +467,31 @@
       <div id="distribution-plot"></div>
     </div>
   </main>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-section">
+        <h3>Authors</h3>
+        <p>Mohammed Saqr, Sonsoles Lopez-Pernas, Satu Helske, Shane Murphy</p>
+      </div>
+      <div class="footer-section">
+        <h3>Packages</h3>
+        <ul>
+          <li><a href="https://github.com/mohsaqr/tna-js" target="_blank">tnaj</a> &mdash; TypeScript/JavaScript (this demo)</li>
+          <li><a href="https://cran.r-project.org/package=TNA" target="_blank">TNA</a> &mdash; R (CRAN)</li>
+          <li><a href="https://github.com/mohsaqr/tnapy" target="_blank">tna</a> &mdash; Python (PyPI)</li>
+        </ul>
+      </div>
+      <div class="footer-section">
+        <h3>References</h3>
+        <ol>
+          <li>Saqr, M., Lopez-Pernas, S., Helske, S., &amp; Murphy, S. (2025). Transition Network Analysis: A Novel Framework for Modeling, Visualizing, and Identifying the Temporal Patterns of Learners and Learning. <em>Journal of Learning Analytics</em>. <a href="https://doi.org/10.18608/jla.2025.8382" target="_blank">doi:10.18608/jla.2025.8382</a></li>
+          <li>Saqr, M., &amp; Lopez-Pernas, S. (2021). The longitudinal trajectories of online engagement over a full program. <em>Computers &amp; Education</em>, 175, 104325. <a href="https://doi.org/10.1016/j.compedu.2021.104325" target="_blank">doi:10.1016/j.compedu.2021.104325</a></li>
+          <li>Saqr, M., Lopez-Pernas, S., Helske, S., &amp; Murphy, S. (2023). <em>TNA: Transition Network Analysis</em>. R package version 1.2.0. <a href="https://cran.r-project.org/package=TNA" target="_blank">CRAN</a></li>
+        </ol>
+      </div>
+    </div>
+  </footer>
 
   <div class="tooltip" id="tooltip"></div>
 
