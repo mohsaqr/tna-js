@@ -6,7 +6,7 @@ A zero-dependency, pure TypeScript implementation of Transition Network Analysis
 
 Ported from the [R TNA package](https://cran.r-project.org/package=TNA) and the [Python tna package](https://github.com/mohsaqr/tnapy), with numerical equivalence to R TNA validated to machine epsilon (~1e-15).
 
-**Live demo:** [https://saqr.me/tna-js/](https://saqr.me/tna-js/)
+**Live demo:** [https://saqr.me/tna-js/](https://saqr.me/tna-js/) | **Desktop app:** [TNA Desktop](https://saqr.me/tnadesktop/)
 
 ---
 
@@ -33,6 +33,7 @@ Ported from the [R TNA package](https://cran.r-project.org/package=TNA) and the 
 - [Data Format](#data-format)
 - [Types Reference](#types-reference)
 - [Citation](#citation)
+- [Related Projects](#related-projects)
 - [License](#license)
 
 ---
@@ -961,6 +962,17 @@ If you use TNA in your research, please cite:
 - Saqr, M., Lopez-Pernas, S., & Tikka, S. (2025). Capturing the breadth and dynamics of the temporal process with frequency transition network analysis. In *Advanced Learning Analytics Methods: AI, Precision and Complexity*. Springer.
 
 - Lopez-Pernas, S., Tikka, S., & Saqr, M. (2025). Mining patterns and clusters with transition network analysis: A heterogeneity approach. In *Advanced Learning Analytics Methods: AI, Precision and Complexity*. Springer.
+
+---
+
+## Related Projects
+
+| Project | Language | Links |
+|---------|----------|-------|
+| **tna** | R | [CRAN](https://cran.r-project.org/package=TNA) · [GitHub](https://github.com/sonsoleslp/tna) |
+| **tna** | Python | [PyPI](https://pypi.org/project/tna/) · [GitHub](https://github.com/mohsaqr/tnapy) |
+| **tnaj** | TypeScript/JS | [npm](https://www.npmjs.com/package/tnaj) · [GitHub](https://github.com/mohsaqr/tna-js) |
+| **TNA Desktop** | Web app | [Launch](https://saqr.me/tnadesktop/) · [GitHub](https://github.com/mohsaqr/tna-desktop) |
 
 ---
 

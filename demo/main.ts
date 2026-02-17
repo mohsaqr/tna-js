@@ -764,7 +764,7 @@ function renderMosaic(model: TNA) {
           d3.select(this).attr('stroke-width', 2);
           showTooltip(event,
             `<b>${labels[i]} → ${labels[j]}</b><br>` +
-            `Count: ${val.toFixed(1)}<br>Residual: ${stdres.toFixed(2)}`);
+            `Count: ${Number.isInteger(val) ? val : val.toFixed(2)}<br>Residual: ${stdres.toFixed(2)}`);
         })
         .on('mousemove', function (event: MouseEvent) {
           tooltip.style.left = event.clientX + 12 + 'px';
@@ -785,7 +785,7 @@ function renderMosaic(model: TNA) {
           .attr('font-size', '8px')
           .attr('fill', Math.abs(stdres) > 2.5 ? '#fff' : '#333')
           .attr('pointer-events', 'none')
-          .text(val.toFixed(0));
+          .text(Number.isInteger(val) ? val : val.toFixed(2));
       }
 
       yStart += h;
