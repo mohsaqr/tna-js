@@ -122,10 +122,16 @@ interface EdgeDatum {
   weight: number;
 }
 
+/** Format edge weight: integers shown without decimals, others as .XX */
+function fmtWeight(w: number): string {
+  if (Number.isInteger(w)) return String(w);
+  return w.toFixed(2).replace(/^0\./, '.');
+}
+
 const graphContainer = document.getElementById('network-graph')!;
 const graphWidth = 640;
 const graphHeight = 420;
-const NODE_R = 26;
+const NODE_R = 22;
 
 const graphSvg = d3.select(graphContainer)
   .append('svg')
@@ -225,13 +231,13 @@ function renderNetwork(model: TNA, comm?: CommunityResult) {
   const n = model.labels.length;
   const weights = model.weights;
 
-  // Build edges (skip self-loops)
+  // Build edges (skip self-loops and zero-weight)
   const edges: EdgeDatum[] = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       if (i === j) continue;
       const w = weights.get(i, j);
-      if (w >= 0.05) edges.push({ fromIdx: i, toIdx: j, weight: w });
+      if (w > 0 && w >= 0.05) edges.push({ fromIdx: i, toIdx: j, weight: w });
     }
   }
 
@@ -258,11 +264,11 @@ function renderNetwork(model: TNA, comm?: CommunityResult) {
   }
 
   const maxW = Math.max(...edges.map(e => e.weight), 1e-6);
-  const widthScale = d3.scaleLinear().domain([0, maxW]).range([0.6, 2.8]);
-  const opacityScale = d3.scaleLinear().domain([0, maxW]).range([0.2, 0.55]);
+  const widthScale = d3.scaleLinear().domain([0, maxW]).range([0.3, 4]);
+  const opacityScale = d3.scaleLinear().domain([0, maxW]).range([0.7, 1.0]);
 
-  const EDGE_COLOR = '#4a7fba';
-  const ARROW_COLOR = '#3a6a9f';
+  const EDGE_COLOR = '#2B4C7E';
+  const ARROW_COLOR = '#2B4C7E';
 
   // ── Edges ──
   edgeGroup.selectAll('*').remove();
@@ -313,10 +319,14 @@ function renderNetwork(model: TNA, comm?: CommunityResult) {
       .attr('y', labelY)
       .attr('text-anchor', 'middle')
       .attr('dy', '0.3em')
-      .attr('font-size', '7px')
-      .attr('fill', '#556')
+      .attr('font-size', '9px')
+      .attr('fill', '#2B4C7E')
       .attr('pointer-events', 'none')
-      .text(e.weight.toFixed(2).replace(/^0\./, '.'));
+      .style('paint-order', 'stroke')
+      .style('stroke', '#ffffff')
+      .style('stroke-width', '3px')
+      .style('stroke-linejoin', 'round')
+      .text(fmtWeight(e.weight));
   }
 
   // ── Nodes ──
@@ -328,8 +338,8 @@ function renderNetwork(model: TNA, comm?: CommunityResult) {
 
   nodeEnter.append('circle')
     .attr('r', NODE_R)
-    .attr('stroke', '#fff')
-    .attr('stroke-width', 2.5);
+    .attr('stroke', '#999999')
+    .attr('stroke-width', 2);
 
   nodeEnter.append('text')
     .attr('class', 'node-label')
@@ -345,7 +355,7 @@ function renderNetwork(model: TNA, comm?: CommunityResult) {
       tooltip.style.top = event.clientY - 10 + 'px';
     })
     .on('mouseout', function () {
-      d3.select(this).select('circle').attr('stroke', '#fff').attr('stroke-width', 2.5);
+      d3.select(this).select('circle').attr('stroke', '#999999').attr('stroke-width', 2);
       hideTooltip();
     });
 
