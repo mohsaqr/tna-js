@@ -54,7 +54,10 @@ export function communities(
   const assignments: Record<string, number[]> = {};
 
   for (const method of methods) {
-    const comm = detectCommunities(sym, n, method);
+    // Walktrap uses the directed weight matrix, all others use symmetric
+    const comm = method === 'walktrap'
+      ? walktrap(weights, n)
+      : detectCommunities(sym, n, method);
     counts[method] = new Set(comm).size;
     assignments[method] = comm;
   }
@@ -67,7 +70,6 @@ function detectCommunities(adj: Matrix, n: number, method: CommunityMethod): num
     case 'leading_eigen':
       return leadingEigen(adj, n);
     case 'louvain':
-    case 'walktrap':
       return louvain(adj, n);
     case 'fast_greedy':
       return greedyModularity(adj, n);
@@ -427,6 +429,139 @@ function modularity(adj: Matrix, comm: number[], n: number): number {
     }
   }
   return Q / m2;
+}
+
+/**
+ * Walktrap community detection (Pons & Latapy 2005).
+ * Uses random walks on the directed graph + Ward-style agglomerative clustering.
+ * @param directedAdj - Original directed weight matrix
+ * @param n - Number of nodes
+ * @param t - Walk length (default 4, matching R igraph default)
+ */
+function walktrap(directedAdj: Matrix, n: number, t = 4): number[] {
+  if (n <= 1) return new Array(n).fill(0);
+
+  // Step 1: Build row-stochastic transition matrix P from directed weights
+  const P = Matrix.zeros(n, n);
+  for (let i = 0; i < n; i++) {
+    let rowSum = 0;
+    for (let j = 0; j < n; j++) rowSum += directedAdj.get(i, j);
+    if (rowSum > 0) {
+      for (let j = 0; j < n; j++) P.set(i, j, directedAdj.get(i, j) / rowSum);
+    }
+  }
+
+  // Step 2: Compute P^t (t-step transition probabilities)
+  let Pt = P.clone();
+  for (let step = 1; step < t; step++) {
+    const next = Matrix.zeros(n, n);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        let s = 0;
+        for (let k = 0; k < n; k++) s += Pt.get(i, k) * P.get(k, j);
+        next.set(i, j, s);
+      }
+    }
+    Pt = next;
+  }
+
+  // Step 3: Compute vertex degrees (from directed adjacency, out-degree)
+  const deg = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) deg[i]! += directedAdj.get(i, j);
+  }
+
+  // Step 4: For each community, maintain mean walk distribution
+  // communityDist[c][k] = (1/|C|) * sum_{i in C} Pt(i, k)
+  const communityDist: Float64Array[] = [];
+  for (let i = 0; i < n; i++) {
+    const dist = new Float64Array(n);
+    for (let k = 0; k < n; k++) dist[k] = Pt.get(i, k);
+    communityDist.push(dist);
+  }
+
+  // Track community membership and sizes
+  const comm = Array.from({ length: n }, (_, i) => i);
+  const commSize = new Float64Array(n).fill(1);
+
+  // Build symmetric adjacency for modularity computation
+  const sym = Matrix.zeros(n, n);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const w = directedAdj.get(i, j) + directedAdj.get(j, i);
+      if (w > 0) {
+        sym.set(i, j, w);
+        sym.set(j, i, w);
+      }
+    }
+  }
+
+  // Track best partition by modularity
+  let bestComm = comm.slice();
+  let bestMod = modularity(sym, comm, n);
+
+  // Step 5: Ward-style agglomerative clustering
+  // n-1 merges at most
+  for (let step = 0; step < n - 1; step++) {
+    // Find pair of active communities with smallest Ward distance
+    const activeComms = [...new Set(comm)];
+    if (activeComms.length <= 1) break;
+
+    let bestA = -1, bestB = -1;
+    let bestDist = Infinity;
+
+    for (let ai = 0; ai < activeComms.length; ai++) {
+      for (let bi = ai + 1; bi < activeComms.length; bi++) {
+        const cA = activeComms[ai]!;
+        const cB = activeComms[bi]!;
+        const sA = commSize[cA]!;
+        const sB = commSize[cB]!;
+
+        // Ward distance: (|C1|*|C2|)/(|C1|+|C2|) * d(C1,C2)^2
+        // d(C1,C2)^2 = sum_k (distA[k] - distB[k])^2 / deg[k]
+        let d2 = 0;
+        for (let k = 0; k < n; k++) {
+          if (deg[k]! === 0) continue;
+          const diff = communityDist[cA]![k]! - communityDist[cB]![k]!;
+          d2 += (diff * diff) / deg[k]!;
+        }
+        const ward = (sA * sB) / (sA + sB) * d2;
+
+        if (ward < bestDist) {
+          bestDist = ward;
+          bestA = cA;
+          bestB = cB;
+        }
+      }
+    }
+
+    if (bestA < 0) break;
+
+    // Merge bestB into bestA
+    const sA = commSize[bestA]!;
+    const sB = commSize[bestB]!;
+    const sNew = sA + sB;
+
+    // Update mean walk distribution for merged community
+    for (let k = 0; k < n; k++) {
+      communityDist[bestA]![k] = (sA * communityDist[bestA]![k]! + sB * communityDist[bestB]![k]!) / sNew;
+    }
+    commSize[bestA] = sNew;
+
+    // Reassign nodes
+    for (let i = 0; i < n; i++) {
+      if (comm[i] === bestB) comm[i] = bestA;
+    }
+
+    // Check modularity of current partition
+    const mod = modularity(sym, comm, n);
+    if (mod > bestMod) {
+      bestMod = mod;
+      bestComm = comm.slice();
+    }
+  }
+
+  return renumberCommunities(bestComm);
 }
 
 function renumberCommunities(comm: number[]): number[] {
