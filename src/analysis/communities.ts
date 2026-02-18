@@ -136,8 +136,9 @@ function louvain(adj: Matrix, n: number): number[] {
   const totalWeight = adj.sum() / 2;
   if (totalWeight === 0) return comm;
 
+  const maxIter = n * n;
   let improved = true;
-  while (improved) {
+  for (let pass = 0; pass < maxIter && improved; pass++) {
     improved = false;
     for (let i = 0; i < n; i++) {
       const currentComm = comm[i]!;

@@ -144,7 +144,9 @@ function transitionsCooccurrence(
         const idx2 = stateToIdx.get(valid[j]!.state);
         if (idx1 !== undefined && idx2 !== undefined) {
           counts.set(idx1, idx2, counts.get(idx1, idx2) + 1);
-          counts.set(idx2, idx1, counts.get(idx2, idx1) + 1);
+          if (idx1 !== idx2) {
+            counts.set(idx2, idx1, counts.get(idx2, idx1) + 1);
+          }
         }
       }
     }
@@ -351,6 +353,7 @@ export function computeTransitions3D(
   data: SequenceData,
   states: string[],
   type: ModelType = 'relative',
+  params?: TransitionParams,
 ): Matrix[] {
   const nSequences = data.length;
   const nStates = states.length;
@@ -401,7 +404,26 @@ export function computeTransitions3D(
           const ti = stateToIdx.get(toVal!);
           if (fi !== undefined && ti !== undefined) {
             trans[row]!.set(fi, ti, trans[row]!.get(fi, ti) + 1);
-            trans[row]!.set(ti, fi, trans[row]!.get(ti, fi) + 1);
+            if (fi !== ti) {
+              trans[row]!.set(ti, fi, trans[row]!.get(ti, fi) + 1);
+            }
+          }
+        }
+      }
+    }
+  } else if (type === 'attention') {
+    const beta = params?.beta ?? 0.1;
+    for (let i = 0; i < nCols; i++) {
+      for (let j = i + 1; j < nCols; j++) {
+        for (let row = 0; row < nSequences; row++) {
+          const fromVal = data[row]![i];
+          const toVal = data[row]![j];
+          if (isNA(fromVal) || isNA(toVal)) continue;
+          const fi = stateToIdx.get(fromVal!);
+          const ti = stateToIdx.get(toVal!);
+          if (fi !== undefined && ti !== undefined) {
+            const d = Math.exp(-beta * (j - i));
+            trans[row]!.set(fi, ti, trans[row]!.get(fi, ti) + d);
           }
         }
       }

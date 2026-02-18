@@ -21,8 +21,9 @@ export function createTNA(
   data: SequenceData | null = null,
   type: ModelType = 'relative',
   scaling: string[] = [],
+  params?: import('./types.js').TransitionParams,
 ): TNA {
-  return { weights, inits, labels, data, type, scaling };
+  return { weights, inits, labels, data, type, scaling, params };
 }
 
 /** Check if input is a square numeric matrix (not sequence data). */
@@ -80,7 +81,7 @@ export function buildModel(
   const { weights, inits } = computeTransitions(processedData, stateLabels, type, params);
   const { weights: scaled, applied } = applyScaling(weights, scaling);
 
-  return createTNA(scaled, inits, stateLabels, processedData, type, applied);
+  return createTNA(scaled, inits, stateLabels, processedData, type, applied, params);
 }
 
 /** Build a relative transition probability model. */

@@ -72,6 +72,8 @@ export interface TNA {
   type: ModelType;
   /** Scaling methods applied. */
   scaling: string[];
+  /** Transition parameters (e.g. beta for attention model). */
+  params?: TransitionParams;
 }
 
 /** GroupTNA: mapping from group name to TNA model. */
