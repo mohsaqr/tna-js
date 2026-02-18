@@ -113,8 +113,7 @@ describe('CTNA model', () => {
     expect(model.type).toBe('co-occurrence');
     // Symmetric: w(i,j) should relate to w(j,i)
     const w = model.weights;
-    // Co-occurrence is row-normalized, so not directly symmetric
-    // but the underlying counts are symmetric
+    // Co-occurrence returns raw bidirectional counts
     expect(w.rows).toBe(expectedLabels.length);
   });
 });
@@ -124,12 +123,10 @@ describe('ATNA model', () => {
     const model = atna(smallData);
     expect(model.type).toBe('attention');
     expect(model.weights.rows).toBe(expectedLabels.length);
-    // Row sums should be ~1.0
+    // Attention returns raw weighted counts (not row-normalized)
     const rowSums = model.weights.rowSums();
     for (let i = 0; i < rowSums.length; i++) {
-      if (rowSums[i]! > 0) {
-        expect(rowSums[i]).toBeCloseTo(1.0, 8);
-      }
+      expect(rowSums[i]!).toBeGreaterThanOrEqual(0);
     }
   });
 });

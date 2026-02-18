@@ -137,23 +137,25 @@ function transitionsCooccurrence(
     const firstIdx = stateToIdx.get(valid[0]!.state);
     if (firstIdx !== undefined) inits[firstIdx]!++;
 
+    // All pairs (i, j) where i < j — matches R's compute_transitions
     for (let i = 0; i < valid.length - 1; i++) {
-      const idx1 = stateToIdx.get(valid[i]!.state);
-      const idx2 = stateToIdx.get(valid[i + 1]!.state);
-      if (idx1 !== undefined && idx2 !== undefined) {
-        counts.set(idx1, idx2, counts.get(idx1, idx2) + 1);
-        counts.set(idx2, idx1, counts.get(idx2, idx1) + 1);
+      for (let j = i + 1; j < valid.length; j++) {
+        const idx1 = stateToIdx.get(valid[i]!.state);
+        const idx2 = stateToIdx.get(valid[j]!.state);
+        if (idx1 !== undefined && idx2 !== undefined) {
+          counts.set(idx1, idx2, counts.get(idx1, idx2) + 1);
+          counts.set(idx2, idx1, counts.get(idx2, idx1) + 1);
+        }
       }
     }
   }
 
-  const weights = rowNormalize(counts);
   const initSum = inits.reduce((a, b) => a + b, 0);
   if (initSum > 0) {
     for (let i = 0; i < inits.length; i++) inits[i]! /= initSum;
   }
 
-  return { weights, inits };
+  return { weights: counts, inits };
 }
 
 function transitionsReverse(
@@ -330,13 +332,12 @@ function transitionsAttention(
     }
   }
 
-  const weights = rowNormalize(counts);
   const initSum = inits.reduce((a, b) => a + b, 0);
   if (initSum > 0) {
     for (let i = 0; i < inits.length; i++) inits[i]! /= initSum;
   }
 
-  return { weights, inits };
+  return { weights: counts, inits };
 }
 
 /**
