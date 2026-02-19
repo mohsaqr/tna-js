@@ -15,6 +15,10 @@ Ported from the [R TNA package](https://cran.r-project.org/package=TNA) and the 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
+- [Guides](#guides)
+  - [Clustering Sequences and Building Per-Cluster Models](#clustering-sequences-and-building-per-cluster-models)
+  - [Building a Dashboard with Clusters](#building-a-dashboard-with-clusters)
+  - [Group Comparison Workflow](#group-comparison-workflow)
 - [API Reference](#api-reference)
   - [Model Building](#model-building)
   - [Centralities](#centralities)
@@ -117,6 +121,446 @@ console.log(comm.counts.louvain);         // 2
 - Network pruning, community detection, clique detection
 - Sequence clustering (PAM, hierarchical) with 4 distance metrics
 - Pattern comparison across groups with permutation testing
+
+---
+
+## Guides
+
+### Clustering Sequences and Building Per-Cluster Models
+
+A common workflow is to cluster sequences by similarity, then build a separate TNA model for each cluster to compare behavioral patterns across groups.
+
+```typescript
+import {
+  tna, clusterSequences, centralities, communities, prune, summary,
+  colorPalette, createColorMap,
+} from 'tnaj';
+
+// 1. Your sequence data
+const sequences = [
+  ['read', 'annotate', 'discuss', 'quiz', 'read'],
+  ['read', 'quiz', 'read', 'annotate', 'discuss'],
+  ['discuss', 'read', 'annotate', 'read', 'quiz'],
+  ['quiz', 'quiz', 'quiz', 'read', 'quiz'],
+  ['quiz', 'read', 'quiz', 'quiz', 'quiz'],
+  ['read', 'read', 'annotate', 'discuss', 'quiz'],
+];
+
+// 2. Cluster sequences into k groups
+const k = 2;
+const clusters = clusterSequences(sequences, k, {
+  dissimilarity: 'lv',   // Levenshtein distance
+  method: 'pam',         // Partitioning Around Medoids
+});
+
+console.log(clusters.assignments); // e.g. [1, 1, 1, 2, 2, 1] (1-indexed)
+console.log(clusters.silhouette);  // Clustering quality (-1 to 1)
+console.log(clusters.sizes);       // e.g. [4, 2]
+
+// 3. Split sequences by cluster
+const clusterData: Record<string, (string | null)[][]> = {};
+for (let i = 0; i < sequences.length; i++) {
+  const label = `Cluster ${clusters.assignments[i]}`;
+  if (!clusterData[label]) clusterData[label] = [];
+  clusterData[label].push(sequences[i]!);
+}
+
+// 4. Build a TNA model per cluster
+for (const [name, seqs] of Object.entries(clusterData)) {
+  const model = tna(seqs);
+  const pruned = prune(model, 0.1);
+  const cent = centralities(pruned);
+  const comm = communities(pruned, { methods: 'louvain' });
+  const s = summary(pruned);
+
+  console.log(`\n--- ${name} (${seqs.length} sequences) ---`);
+  console.log(`Edges: ${s.nEdges}, Density: ${Number(s.density).toFixed(3)}`);
+  console.log(`Communities: ${comm.counts.louvain}`);
+  model.labels.forEach((label, i) => {
+    console.log(`  ${label}: OutStrength=${cent.measures.OutStrength[i]!.toFixed(3)}`);
+  });
+}
+```
+
+**Choosing dissimilarity metrics:**
+
+| Metric | Best for | Description |
+|--------|----------|-------------|
+| `hamming` | Equal-length sequences | Counts positional mismatches |
+| `lv` | Variable-length sequences | Edit distance (insert, delete, substitute) |
+| `osa` | Sequences with transpositions | Edit distance + transpositions |
+| `lcs` | Subsequence similarity | Longest common subsequence distance |
+
+**Choosing clustering methods:**
+
+| Method | Description |
+|--------|-------------|
+| `pam` | Partitioning Around Medoids — robust, finds representative sequences |
+| `hierarchical` | Agglomerative clustering with average linkage |
+
+---
+
+### Building a Dashboard with Clusters
+
+This guide shows how to build a multi-panel dashboard that clusters sequences and displays per-cluster networks and centrality charts using D3.js.
+
+**Setup:**
+
+```bash
+npm create vite@latest tna-dashboard -- --template vanilla-ts
+cd tna-dashboard
+npm install tnaj d3
+npm install -D @types/d3
+```
+
+**`src/main.ts` — Full dashboard:**
+
+```typescript
+import {
+  tna, clusterSequences, centralities, prune, communities,
+  summary, colorPalette, AVAILABLE_MEASURES,
+} from 'tnaj';
+import type { TNA, CentralityResult } from 'tnaj';
+import * as d3 from 'd3';
+
+// ──────────────────────────────────────────
+// 1. Data & Clustering
+// ──────────────────────────────────────────
+
+const sequences = [
+  ['read', 'annotate', 'discuss', 'quiz', 'read'],
+  ['read', 'quiz', 'read', 'annotate', 'discuss'],
+  ['discuss', 'read', 'annotate', 'read', 'quiz'],
+  ['quiz', 'quiz', 'quiz', 'read', 'quiz'],
+  ['quiz', 'read', 'quiz', 'quiz', 'quiz'],
+  ['read', 'read', 'annotate', 'discuss', 'quiz'],
+  ['annotate', 'discuss', 'read', 'quiz', 'annotate'],
+  ['quiz', 'quiz', 'read', 'quiz', 'read'],
+];
+
+const k = 3;
+const clusters = clusterSequences(sequences, k, {
+  dissimilarity: 'lv',
+  method: 'pam',
+});
+
+// Split sequences by cluster and build per-cluster models
+const clusterGroups = new Map<string, { model: TNA; cent: CentralityResult; size: number }>();
+const clusterSeqs: Record<string, (string | null)[][]> = {};
+
+for (let i = 0; i < sequences.length; i++) {
+  const label = `Cluster ${clusters.assignments[i]}`;
+  if (!clusterSeqs[label]) clusterSeqs[label] = [];
+  clusterSeqs[label].push(sequences[i]!);
+}
+
+for (const [name, seqs] of Object.entries(clusterSeqs)) {
+  const model = tna(seqs);
+  const pruned = prune(model, 0.05);
+  const cent = centralities(pruned);
+  clusterGroups.set(name, { model: pruned, cent, size: seqs.length });
+}
+
+// ──────────────────────────────────────────
+// 2. Summary Panel
+// ──────────────────────────────────────────
+
+const app = document.getElementById('app')!;
+
+const summaryHtml = `
+  <h1>TNA Cluster Dashboard</h1>
+  <p>Sequences: ${sequences.length} | Clusters: ${k} |
+     Silhouette: ${clusters.silhouette.toFixed(3)}</p>
+  <p>Sizes: ${clusters.sizes.join(', ')}</p>
+`;
+app.innerHTML = summaryHtml;
+
+// ──────────────────────────────────────────
+// 3. Per-Cluster Network + Centrality Cards
+// ──────────────────────────────────────────
+
+const CARD_COLORS = ['#4e79a7', '#e15759', '#59a14f', '#edc948'];
+const grid = document.createElement('div');
+grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;margin-top:20px';
+app.appendChild(grid);
+
+let idx = 0;
+for (const [name, { model, cent, size }] of clusterGroups) {
+  const color = CARD_COLORS[idx % CARD_COLORS.length]!;
+  const s = summary(model);
+
+  const card = document.createElement('div');
+  card.style.cssText = 'border:1px solid #ddd;border-radius:8px;padding:16px;background:#fff';
+  card.innerHTML = `
+    <h3 style="color:${color};margin:0 0 4px">${name}</h3>
+    <p style="font-size:13px;color:#888;margin:0 0 12px">
+      ${size} sequences · ${s.nEdges} edges · density ${Number(s.density).toFixed(3)}
+    </p>
+    <div id="network-${idx}" style="width:100%;height:300px"></div>
+    <div id="centrality-${idx}" style="width:100%;height:200px;margin-top:12px"></div>
+  `;
+  grid.appendChild(card);
+
+  // Render network diagram
+  requestAnimationFrame(() => {
+    renderForceNetwork(
+      document.getElementById(`network-${idx}`)!, model, color,
+    );
+    renderCentralityBars(
+      document.getElementById(`centrality-${idx}`)!, cent, model.labels, color,
+    );
+  });
+
+  idx++;
+}
+
+// ──────────────────────────────────────────
+// 4. D3 Force-Directed Network Renderer
+// ──────────────────────────────────────────
+
+function renderForceNetwork(container: HTMLElement, model: TNA, accentColor: string) {
+  const n = model.labels.length;
+  const nodeColors = colorPalette(n);
+
+  // Build nodes and links from weight matrix
+  const nodes = model.labels.map((label, i) => ({ id: label, index: i }));
+  const links: { source: string; target: string; weight: number }[] = [];
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const w = model.weights.get(i, j);
+      if (w > 0 && i !== j) {
+        links.push({ source: model.labels[i]!, target: model.labels[j]!, weight: w });
+      }
+    }
+  }
+
+  const maxW = Math.max(...links.map(l => l.weight), 0.01);
+
+  const rect = container.getBoundingClientRect();
+  const width = Math.max(rect.width, 300);
+  const height = 300;
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', width).attr('height', height);
+
+  // Arrowhead marker
+  svg.append('defs').append('marker')
+    .attr('id', 'arrow').attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20).attr('refY', 0)
+    .attr('markerWidth', 6).attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#999');
+
+  const simulation = d3.forceSimulation(nodes as any)
+    .force('link', d3.forceLink(links as any).id((d: any) => d.id).distance(80))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(width / 2, height / 2));
+
+  const link = svg.selectAll('.link')
+    .data(links).enter().append('line')
+    .attr('class', 'link')
+    .attr('stroke', '#999').attr('stroke-opacity', 0.6)
+    .attr('stroke-width', d => Math.max(1, (d.weight / maxW) * 5))
+    .attr('marker-end', 'url(#arrow)');
+
+  const node = svg.selectAll('.node')
+    .data(nodes).enter().append('circle')
+    .attr('r', 12)
+    .attr('fill', (_d, i) => nodeColors[i]!)
+    .attr('stroke', '#fff').attr('stroke-width', 2);
+
+  const label = svg.selectAll('.label')
+    .data(nodes).enter().append('text')
+    .text(d => d.id)
+    .attr('font-size', '10px').attr('text-anchor', 'middle').attr('dy', '0.35em');
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', (d: any) => d.source.x).attr('y1', (d: any) => d.source.y)
+      .attr('x2', (d: any) => d.target.x).attr('y2', (d: any) => d.target.y);
+    node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+    label.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+  });
+}
+
+// ──────────────────────────────────────────
+// 5. Centrality Bar Chart Renderer
+// ──────────────────────────────────────────
+
+function renderCentralityBars(
+  container: HTMLElement,
+  cent: CentralityResult,
+  labels: string[],
+  accentColor: string,
+) {
+  const measure = 'OutStrength';
+  const values = cent.measures[measure];
+  const data = labels.map((label, i) => ({ label, value: values[i]! }))
+    .sort((a, b) => b.value - a.value);
+
+  const rect = container.getBoundingClientRect();
+  const width = Math.max(rect.width, 300);
+  const height = 200;
+  const margin = { top: 20, right: 20, bottom: 30, left: 80 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = d3.select(container).append('svg').attr('width', width).attr('height', height);
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  g.append('text').attr('x', innerW / 2).attr('y', -6)
+    .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', '#666')
+    .text(measure);
+
+  const y = d3.scaleBand().domain(data.map(d => d.label)).range([0, innerH]).padding(0.2);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.value)! * 1.15]).range([0, innerW]);
+
+  g.selectAll('rect').data(data).enter().append('rect')
+    .attr('y', d => y(d.label)!).attr('width', d => x(d.value))
+    .attr('height', y.bandwidth()).attr('fill', accentColor).attr('rx', 3);
+
+  g.selectAll('.val').data(data).enter().append('text')
+    .attr('x', d => x(d.value) + 4).attr('y', d => y(d.label)! + y.bandwidth() / 2)
+    .attr('dy', '0.35em').attr('font-size', '10px').attr('fill', '#666')
+    .text(d => d.value.toFixed(3));
+
+  g.append('g').call(d3.axisLeft(y).tickSize(0).tickPadding(6));
+  g.append('g').attr('transform', `translate(0,${innerH})`).call(d3.axisBottom(x).ticks(4));
+}
+```
+
+**`index.html`:**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TNA Cluster Dashboard</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; background: #f5f5f5; }
+    #app { max-width: 1200px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+```
+
+Run with `npm run dev` — you'll see a dashboard with per-cluster network visualizations and centrality bar charts.
+
+**Extending the dashboard:**
+
+```typescript
+// Add community detection per cluster
+import { communities } from 'tnaj';
+
+for (const [name, { model }] of clusterGroups) {
+  const comm = communities(model, { methods: ['louvain', 'walktrap'] });
+  console.log(`${name}: ${comm.counts.louvain} communities (Louvain)`);
+
+  // Color nodes by community
+  const communityColors = ['#4e79a7', '#e15759', '#59a14f', '#edc948'];
+  model.labels.forEach((label, i) => {
+    const commId = comm.assignments.louvain![i]!;
+    console.log(`  ${label} → Community ${commId} (${communityColors[commId]})`);
+  });
+}
+
+// Add clique detection
+import { cliques } from 'tnaj';
+
+for (const [name, { model }] of clusterGroups) {
+  const cl = cliques(model, { threshold: 0.05 });
+  console.log(`${name}: ${cl.labels.length} cliques found`);
+  cl.labels.forEach((labels, i) => {
+    console.log(`  Clique ${i + 1}: ${labels.join(' → ')}`);
+  });
+}
+
+// Compare patterns across clusters with permutation testing
+import { groupTna, compareSequences } from 'tnaj';
+
+// Build group model: flat sequences + parallel cluster labels
+const clusterLabels = sequences.map((_s, i) => `Cluster ${clusters.assignments[i]}`);
+const gModel = groupTna(sequences, clusterLabels);
+const comparison = compareSequences(gModel, {
+  sub: [1, 2],      // Compare single states and bigrams
+  test: true,        // Run permutation test
+  iter: 999,
+  seed: 42,
+});
+
+for (const row of comparison) {
+  if (row.pValue !== undefined && row.pValue < 0.05) {
+    console.log(`Significant: ${row.pattern} (p=${row.pValue.toFixed(3)}, ES=${row.effectSize?.toFixed(3)})`);
+  }
+}
+```
+
+---
+
+### Group Comparison Workflow
+
+When your data already has group labels (e.g., experimental vs. control, high vs. low performers), use group models directly:
+
+```typescript
+import {
+  groupTna, centralities, communities, prune, compareSequences,
+  groupNames, groupEntries,
+} from 'tnaj';
+
+// All sequences in a flat array
+const sequences = [
+  ['read', 'annotate', 'discuss', 'quiz', 'read'],
+  ['read', 'discuss', 'annotate', 'quiz', 'discuss'],
+  ['annotate', 'read', 'discuss', 'quiz', 'annotate'],
+  ['quiz', 'quiz', 'read', 'quiz', 'quiz'],
+  ['read', 'quiz', 'quiz', 'read', 'quiz'],
+  ['quiz', 'read', 'quiz', 'quiz', 'read'],
+];
+
+// Parallel array of group labels (one per sequence)
+const groups = [
+  'High Performers', 'High Performers', 'High Performers',
+  'Low Performers', 'Low Performers', 'Low Performers',
+];
+
+// Build group models in one call
+const gModel = groupTna(sequences, groups);
+
+// Centralities across all groups (combined result with group labels)
+const cent = centralities(gModel);
+console.log(cent.groups);   // ['High Performers', 'High Performers', ..., 'Low Performers', ...]
+console.log(cent.labels);   // State labels repeated per group
+
+// Per-group analysis
+for (const [name, model] of groupEntries(gModel)) {
+  const pruned = prune(model, 0.1);
+  const comm = communities(pruned, { methods: 'louvain' });
+  console.log(`${name}: ${comm.counts.louvain} communities`);
+}
+
+// Statistical comparison: which patterns differ between groups?
+const comparison = compareSequences(gModel, {
+  sub: [1, 2, 3],   // Unigrams, bigrams, trigrams
+  test: true,
+  iter: 999,
+  adjust: 'bonferroni',
+  seed: 42,
+});
+
+// Show significant differences
+const significant = comparison.filter(r => r.pValue !== undefined && r.pValue < 0.05);
+for (const row of significant) {
+  console.log(`${row.pattern}: p=${row.pValue!.toFixed(3)}, ES=${row.effectSize?.toFixed(3)}`);
+  console.log(`  Proportions:`, row.proportions);
+}
+```
 
 ---
 
@@ -401,23 +845,19 @@ console.log(result.sizes);        // [2, 2]
 
 ### Sequence Comparison
 
-#### `compareSequences(data, groups, options?)`
+#### `compareSequences(groupModel, options?)`
 
 Compare subsequence patterns between groups (e.g., high vs. low performers).
 
 ```typescript
-import { compareSequences } from 'tnaj';
+import { groupTna, compareSequences } from 'tnaj';
 
-const data = [
-  ['A', 'B', 'C'],
-  ['A', 'C', 'B'],
-  ['C', 'B', 'A'],
-  ['C', 'A', 'B'],
-];
+const sequences = [['A', 'B', 'C'], ['A', 'C', 'B'], ['C', 'B', 'A'], ['C', 'A', 'B']];
 const groups = ['high', 'high', 'low', 'low'];
+const gModel = groupTna(sequences, groups);
 
-const result = compareSequences(data, groups, {
-  lengths: [1, 2],
+const result = compareSequences(gModel, {
+  sub: [1, 2],
   minFreq: 0,
 });
 
@@ -425,16 +865,30 @@ const result = compareSequences(data, groups, {
 for (const row of result) {
   console.log(row.pattern, row.frequencies, row.proportions);
 }
+
+// With permutation testing for statistical significance
+const tested = compareSequences(gModel, {
+  sub: [1, 2, 3],
+  test: true,
+  iter: 999,
+  adjust: 'bonferroni',
+  seed: 42,
+});
+
+for (const row of tested) {
+  if (row.pValue !== undefined && row.pValue < 0.05) {
+    console.log(`${row.pattern}: p=${row.pValue.toFixed(3)}, ES=${row.effectSize?.toFixed(3)}`);
+  }
+}
 ```
 
 **Parameters:**
-- `data` — `SequenceData`
-- `groups` — `string[]` — Group label per sequence
-- `options.lengths` — `number[]` — Subsequence lengths to compare (default: `[1, 2, 3]`)
+- `groupModel` — `GroupTNA` — Group model built with `groupTna()`, `groupFtna()`, etc.
+- `options.sub` — `number[]` — Subsequence lengths to compare (default: `[1, 2, 3]`)
 - `options.minFreq` — `number` — Minimum frequency threshold (default: `0`)
 - `options.test` — `boolean` — Run permutation test (default: `false`)
 - `options.iter` — `number` — Number of permutation iterations (default: `999`)
-- `options.adjust` — `string` — P-value adjustment method: `'bonferroni'`, `'holm'`, `'bh'` (default: `'bonferroni'`)
+- `options.adjust` — `string` — P-value adjustment method: `'bonferroni'`, `'holm'`, `'fdr'`, `'BH'`, `'none'` (default: `'bonferroni'`)
 - `options.seed` — `number` — Random seed for reproducibility
 
 **Returns:** `CompareRow[]`
@@ -448,20 +902,17 @@ Build and analyze TNA models for multiple groups simultaneously.
 ```typescript
 import { groupTna, centralities, communities, prune, groupNames, groupEntries } from 'tnaj';
 
-// Data split by group
-const groups = {
-  high: [
-    ['A', 'B', 'C'],
-    ['A', 'C', 'B'],
-  ],
-  low: [
-    ['C', 'B', 'A'],
-    ['C', 'A', 'B'],
-  ],
-};
+// All sequences in a flat array, with a parallel array of group labels
+const sequences = [
+  ['A', 'B', 'C'],    // high
+  ['A', 'C', 'B'],    // high
+  ['C', 'B', 'A'],    // low
+  ['C', 'A', 'B'],    // low
+];
+const groups = ['high', 'high', 'low', 'low'];
 
 // Build group models
-const gModel = groupTna(groups);
+const gModel = groupTna(sequences, groups);
 
 // List group names
 console.log(groupNames(gModel)); // ['high', 'low']
@@ -479,13 +930,13 @@ const comm = communities(gModel);        // { high: CommunityResult, low: Commun
 
 #### Group builder functions
 
-| Function | Description |
-|----------|-------------|
-| `groupTna(groups)` | Relative transition probabilities per group |
-| `groupFtna(groups)` | Frequency counts per group |
-| `groupCtna(groups)` | Co-occurrence per group |
-| `groupAtna(groups)` | Attention-weighted per group |
-| `createGroupTNA(models)` | Create from pre-built TNA objects |
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `groupTna(data, groups)` | `(SequenceData, string[])` | Relative transition probabilities per group |
+| `groupFtna(data, groups)` | `(SequenceData, string[])` | Frequency counts per group |
+| `groupCtna(data, groups)` | `(SequenceData, string[])` | Co-occurrence per group |
+| `groupAtna(data, groups)` | `(SequenceData, string[])` | Attention-weighted per group |
+| `createGroupTNA(models)` | `(Record<string, TNA>)` | Create from pre-built TNA objects |
 
 ---
 
@@ -781,15 +1232,30 @@ const model = tna(matrix, { labels: ['A', 'B', 'C'] });
 
 ### Grouped Data
 
-An object mapping group names to sequence arrays.
+A flat sequence array with a parallel array of group labels.
 
 ```typescript
-const groups = {
-  experimental: [['A', 'B', 'C'], ['A', 'C', 'B']],
-  control:      [['C', 'B', 'A'], ['C', 'A', 'B']],
-};
+const sequences = [
+  ['A', 'B', 'C'],  // experimental
+  ['A', 'C', 'B'],  // experimental
+  ['C', 'B', 'A'],  // control
+  ['C', 'A', 'B'],  // control
+];
+const groups = ['experimental', 'experimental', 'control', 'control'];
 
-const gModel = groupTna(groups);
+const gModel = groupTna(sequences, groups);
+```
+
+Or create from pre-built TNA models:
+
+```typescript
+import { tna, createGroupTNA } from 'tnaj';
+
+const models = {
+  experimental: tna([['A', 'B', 'C'], ['A', 'C', 'B']]),
+  control: tna([['C', 'B', 'A'], ['C', 'A', 'B']]),
+};
+const gModel = createGroupTNA(models);
 ```
 
 ---
