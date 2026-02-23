@@ -25,7 +25,7 @@ export {
   // Model
   createTNA, buildModel, tna, ftna, ctna, atna, summary,
   // Prepare
-  createSeqdata, prepareData, importOnehot,
+  createSeqdata, prepareData, importOnehot, type OnehotSequenceData,
   // Transitions
   computeTransitions, computeTransitions3D, computeWeightsFrom3D, computeWeightsFromMatrix,
   // Group
@@ -46,6 +46,7 @@ export {
   communities, AVAILABLE_METHODS,
   compareSequences,
   clusterSequences,
+  clusterData,
 } from './analysis/index.js';
 
 // Types

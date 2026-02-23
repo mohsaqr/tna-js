@@ -46,6 +46,12 @@ export interface TransitionParams {
   size?: number;
   /** Decay parameter for attention model. Default 0.1. */
   beta?: number;
+  /** Whether to use windowed co-occurrence (from importOnehot). */
+  windowed?: boolean;
+  /** Window size for windowed co-occurrence. */
+  windowSize?: number;
+  /** Window span (number of columns per row) for windowed co-occurrence. */
+  windowSpan?: number;
 }
 
 /** Options for building a TNA model. */

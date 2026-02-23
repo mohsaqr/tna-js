@@ -4,6 +4,13 @@
  */
 import type { SequenceData, TNAData } from './types.js';
 
+/** Result of importOnehot with window metadata for windowed co-occurrence. */
+export interface OnehotSequenceData {
+  sequences: SequenceData;
+  windowSize: number;
+  windowSpan: number;
+}
+
 /**
  * Create sequence data from a 2D string array (wide format).
  * Extracts unique state labels and optionally adds begin/end states.
@@ -100,9 +107,10 @@ export function prepareData(
  * @param data - Array of records with 0/1 values for each column
  * @param cols - Column names that are one-hot encoded state indicators
  * @param options - windowing options
+ * @returns OnehotSequenceData with sequences and window metadata
  */
 export function importOnehot(
-  data: Record<string, number>[],
+  data: Record<string, number | string>[],
   cols: string[],
   options?: {
     actor?: string;
@@ -111,7 +119,7 @@ export function importOnehot(
     windowType?: 'tumbling' | 'sliding';
     aggregate?: boolean;
   },
-): SequenceData {
+): OnehotSequenceData {
   const windowSize = options?.windowSize ?? 1;
   const windowType = options?.windowType ?? 'tumbling';
   const aggregate = options?.aggregate ?? false;
@@ -145,42 +153,60 @@ export function importOnehot(
 
   for (const groupRows of groups) {
     const nRows = groupRows.length;
+    const rowValues: (string | null)[] = [];
 
-    // Generate window boundaries
-    const windows: [number, number][] = [];
-    if (windowType === 'tumbling') {
+    if (windowType === 'sliding') {
+      // R's sliding window: iterative lag expansion per column,
+      // then remove first row. Each remaining row is a window.
+      const active: boolean[][] = cols.map((_, c) =>
+        Array.from({ length: nRows }, (__, r) => groupRows[r]![c] !== null),
+      );
+
+      // R's seq(1, ws-1) for ws=1 gives c(1,0) — always applies lag(1).
+      const maxW = Math.max(windowSize, 2);
+      for (let w = 1; w < maxW; w++) {
+        for (let c = 0; c < cols.length; c++) {
+          const prev = active[c]!.slice();
+          for (let r = 0; r < nRows; r++) {
+            active[c]![r] = prev[r]! || (r >= w && prev[r - w]!);
+          }
+        }
+      }
+
+      // Remove first row; each remaining row is a window
+      for (let r = 1; r < nRows; r++) {
+        for (let c = 0; c < cols.length; c++) {
+          rowValues.push(active[c]![r] ? cols[c]! : null);
+        }
+      }
+    } else {
+      // Tumbling windows
+      const windows: [number, number][] = [];
       for (let start = 0; start < nRows; start += windowSize) {
         windows.push([start, Math.min(start + windowSize, nRows)]);
       }
-    } else {
-      const nWindows = Math.max(1, nRows - windowSize + 1);
-      for (let start = 0; start < nWindows; start++) {
-        windows.push([start, Math.min(start + windowSize, nRows)]);
-      }
-    }
 
-    const rowValues: (string | null)[] = [];
+      for (const [start, end] of windows) {
+        const windowRows = groupRows.slice(start, end);
 
-    for (const [start, end] of windows) {
-      const windowRows = groupRows.slice(start, end);
-
-      if (windowType === 'sliding' || aggregate) {
-        // One slot per column: first non-null value
-        for (let c = 0; c < cols.length; c++) {
-          let firstVal: string | null = null;
-          for (const r of windowRows) {
-            if (r[c] !== null) {
-              firstVal = r[c]!;
-              break;
-            }
-          }
-          rowValues.push(firstVal);
-        }
-      } else {
-        // Tumbling without aggregate: expand all rows x cols
-        for (const r of windowRows) {
+        if (aggregate) {
+          // One slot per column: first non-null value
           for (let c = 0; c < cols.length; c++) {
-            rowValues.push(r[c]!);
+            let firstVal: string | null = null;
+            for (const r of windowRows) {
+              if (r[c] !== null) {
+                firstVal = r[c]!;
+                break;
+              }
+            }
+            rowValues.push(firstVal);
+          }
+        } else {
+          // Tumbling without aggregate: expand all rows x cols
+          for (const r of windowRows) {
+            for (let c = 0; c < cols.length; c++) {
+              rowValues.push(r[c]!);
+            }
           }
         }
       }
@@ -189,5 +215,12 @@ export function importOnehot(
     result.push(rowValues);
   }
 
-  return result;
+  // R: window_size attr = window_size^(!aggregate) → ws when not aggregate, 1 when aggregate
+  const wsAttr = aggregate ? 1 : windowSize;
+
+  return {
+    sequences: result,
+    windowSize: wsAttr,
+    windowSpan: cols.length,
+  };
 }

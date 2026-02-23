@@ -66,6 +66,9 @@ export function centralities(
     for (let i = 0; i < n; i++) weights.set(i, i, 0);
   }
 
+  // Undirected model types use undirected betweenness
+  const isUndirected = tnaModel.type === 'co-occurrence' || tnaModel.type === 'attention';
+
   const measures: Record<string, Float64Array> = {};
 
   for (const measure of AVAILABLE_MEASURES) {
@@ -88,7 +91,7 @@ export function centralities(
         measures.Closeness = closenessAll(weights, n);
         break;
       case 'Betweenness':
-        measures.Betweenness = betweenness(weights, n);
+        measures.Betweenness = betweenness(weights, n, isUndirected);
         break;
       case 'BetweennessRSP':
         measures.BetweennessRSP = betweennessRSP(weights);
@@ -237,7 +240,7 @@ function closenessAll(weights: Matrix, n: number): Float64Array {
 
 // ---- Betweenness (Brandes' algorithm with 1/weight distances) ----
 
-function betweenness(weights: Matrix, n: number): Float64Array {
+function betweenness(weights: Matrix, n: number, undirected = false): Float64Array {
   const CB = new Float64Array(n);
 
   for (let s = 0; s < n; s++) {
@@ -296,6 +299,11 @@ function betweenness(weights: Matrix, n: number): Float64Array {
         CB[w] = CB[w]! + delta[w]!;
       }
     }
+  }
+
+  // Undirected betweenness counts each pair once, not twice
+  if (undirected) {
+    for (let i = 0; i < n; i++) CB[i] = CB[i]! / 2;
   }
 
   return CB;

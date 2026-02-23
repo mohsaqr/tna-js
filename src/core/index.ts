@@ -16,7 +16,7 @@ export type {
 export { createTNA, buildModel, tna, ftna, ctna, atna, summary } from './model.js';
 
 // Data preparation
-export { createSeqdata, prepareData, importOnehot } from './prepare.js';
+export { createSeqdata, prepareData, importOnehot, type OnehotSequenceData } from './prepare.js';
 
 // Transitions
 export { computeTransitions, computeTransitions3D, computeWeightsFrom3D, computeWeightsFromMatrix } from './transitions.js';

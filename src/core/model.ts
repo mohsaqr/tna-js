@@ -3,7 +3,7 @@
  * Port of Python tna/model.py
  */
 import { Matrix, applyScaling } from './matrix.js';
-import { createSeqdata } from './prepare.js';
+import { createSeqdata, type OnehotSequenceData } from './prepare.js';
 import { computeTransitions, computeWeightsFromMatrix } from './transitions.js';
 import type {
   TNA,
@@ -102,9 +102,22 @@ export function ftna(
 
 /** Build a co-occurrence transition model. */
 export function ctna(
-  x: SequenceData | TNAData | number[][],
-  options?: Omit<BuildModelOptions, 'type' | 'params'>,
+  x: SequenceData | TNAData | number[][] | OnehotSequenceData,
+  options?: Omit<BuildModelOptions, 'type'>,
 ): TNA {
+  // Extract windowed params from OnehotSequenceData
+  if (isOnehotSequenceData(x)) {
+    return buildModel(x.sequences, {
+      ...options,
+      type: 'co-occurrence',
+      params: {
+        ...options?.params,
+        windowed: true,
+        windowSize: x.windowSize,
+        windowSpan: x.windowSpan,
+      },
+    });
+  }
   return buildModel(x, { ...options, type: 'co-occurrence' });
 }
 
@@ -129,6 +142,16 @@ function isTNAData(x: unknown): x is TNAData {
     'sequenceData' in x &&
     'labels' in x &&
     'statistics' in x
+  );
+}
+
+function isOnehotSequenceData(x: unknown): x is OnehotSequenceData {
+  return (
+    typeof x === 'object' &&
+    x !== null &&
+    'sequences' in x &&
+    'windowSize' in x &&
+    'windowSpan' in x
   );
 }
 

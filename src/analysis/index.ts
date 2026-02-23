@@ -7,4 +7,4 @@ export { prune } from './prune.js';
 export { cliques } from './cliques.js';
 export { communities, AVAILABLE_METHODS } from './communities.js';
 export { compareSequences } from './compare.js';
-export { clusterSequences } from './cluster.js';
+export { clusterSequences, clusterData } from './cluster.js';

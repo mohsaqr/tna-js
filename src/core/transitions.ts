@@ -41,7 +41,7 @@ export function computeTransitions(
     case 'frequency':
       return transitionsFrequency(data, stateToIdx, nStates);
     case 'co-occurrence':
-      return transitionsCooccurrence(data, stateToIdx, nStates);
+      return transitionsCooccurrence(data, stateToIdx, nStates, params);
     case 'reverse':
       return transitionsReverse(data, stateToIdx, nStates);
     case 'n-gram':
@@ -126,7 +126,15 @@ function transitionsCooccurrence(
   data: SequenceData,
   stateToIdx: Map<string, number>,
   nStates: number,
+  params?: TransitionParams,
 ): { weights: Matrix; inits: Float64Array } {
+  if (params?.windowed) {
+    return transitionsCooccurrenceWindowed(
+      data, stateToIdx, nStates,
+      params.windowSize ?? 1, params.windowSpan ?? 1,
+    );
+  }
+
   const counts = Matrix.zeros(nStates, nStates);
   const inits = new Float64Array(nStates);
 
@@ -155,6 +163,79 @@ function transitionsCooccurrence(
   const initSum = inits.reduce((a, b) => a + b, 0);
   if (initSum > 0) {
     for (let i = 0; i < inits.length; i++) inits[i]! /= initSum;
+  }
+
+  return { weights: counts, inits };
+}
+
+/** Windowed co-occurrence matching R TNA's compute_transitions_windowed. */
+function transitionsCooccurrenceWindowed(
+  data: SequenceData,
+  stateToIdx: Map<string, number>,
+  nStates: number,
+  windowSize: number,
+  windowSpan: number,
+): { weights: Matrix; inits: Float64Array } {
+  const nSeqs = data.length;
+  const nCols = nSeqs > 0 ? data[0]!.length : 0;
+  const effWindow = windowSize * windowSpan;
+
+  // Number of windows — matches R: q = p %/% ew - (p %% ew == 0); nWindows = q + 1
+  const divides = nCols % effWindow === 0;
+  const q = Math.floor(nCols / effWindow) - (divides ? 1 : 0);
+  const nWindows = q + 1;
+
+  // Build per-sequence 3D counts, then sum
+  const trans: Matrix[] = [];
+  for (let r = 0; r < nSeqs; r++) {
+    trans.push(Matrix.zeros(nStates, nStates));
+  }
+
+  for (let w = 0; w < nWindows; w++) {
+    const wStart = w * effWindow;
+    const wEnd = Math.min(nCols, (w + 1) * effWindow);
+
+    for (let j = wStart; j < wEnd; j++) {
+      for (let k = wStart; k < wEnd; k++) {
+        for (let row = 0; row < nSeqs; row++) {
+          const fromVal = data[row]![j];
+          const toVal = data[row]![k];
+          if (isNA(fromVal) || isNA(toVal)) continue;
+          const fi = stateToIdx.get(fromVal!);
+          const ti = stateToIdx.get(toVal!);
+          if (fi !== undefined && ti !== undefined) {
+            trans[row]!.set(fi, ti, trans[row]!.get(fi, ti) + 1);
+          }
+        }
+      }
+    }
+  }
+
+  // Sum across sequences
+  const counts = Matrix.zeros(nStates, nStates);
+  for (const t of trans) {
+    for (let i = 0; i < nStates; i++) {
+      for (let j = 0; j < nStates; j++) {
+        counts.set(i, j, counts.get(i, j) + t.get(i, j));
+      }
+    }
+  }
+
+  // Inits from first column (matches R: factor(x[, 1L], ...))
+  const inits = new Float64Array(nStates);
+  for (let row = 0; row < nSeqs; row++) {
+    const val = data[row]![0];
+    if (!isNA(val)) {
+      const idx = stateToIdx.get(val!);
+      if (idx !== undefined) inits[idx]!++;
+    }
+  }
+  const initSum = inits.reduce((a, b) => a + b, 0);
+  if (initSum > 0) {
+    for (let i = 0; i < inits.length; i++) inits[i]! /= initSum;
+  } else {
+    // R produces NaN when all first-column values are NA
+    inits.fill(NaN);
   }
 
   return { weights: counts, inits };
@@ -394,18 +475,47 @@ export function computeTransitions3D(
       }
     }
   } else if (type === 'co-occurrence') {
-    for (let i = 0; i < nCols - 1; i++) {
-      for (let j = i + 1; j < nCols; j++) {
-        for (let row = 0; row < nSequences; row++) {
-          const fromVal = data[row]![i];
-          const toVal = data[row]![j];
-          if (isNA(fromVal) || isNA(toVal)) continue;
-          const fi = stateToIdx.get(fromVal!);
-          const ti = stateToIdx.get(toVal!);
-          if (fi !== undefined && ti !== undefined) {
-            trans[row]!.set(fi, ti, trans[row]!.get(fi, ti) + 1);
-            if (fi !== ti) {
-              trans[row]!.set(ti, fi, trans[row]!.get(ti, fi) + 1);
+    if (params?.windowed) {
+      // Windowed co-occurrence: non-overlapping windows, all (j,k) pairs
+      const ws = params.windowSize ?? 1;
+      const wspan = params.windowSpan ?? 1;
+      const effWindow = ws * wspan;
+      const divides = nCols % effWindow === 0;
+      const q = Math.floor(nCols / effWindow) - (divides ? 1 : 0);
+      const nWindows = q + 1;
+
+      for (let w = 0; w < nWindows; w++) {
+        const wStart = w * effWindow;
+        const wEnd = Math.min(nCols, (w + 1) * effWindow);
+        for (let j = wStart; j < wEnd; j++) {
+          for (let k = wStart; k < wEnd; k++) {
+            for (let row = 0; row < nSequences; row++) {
+              const fromVal = data[row]![j];
+              const toVal = data[row]![k];
+              if (isNA(fromVal) || isNA(toVal)) continue;
+              const fi = stateToIdx.get(fromVal!);
+              const ti = stateToIdx.get(toVal!);
+              if (fi !== undefined && ti !== undefined) {
+                trans[row]!.set(fi, ti, trans[row]!.get(fi, ti) + 1);
+              }
+            }
+          }
+        }
+      }
+    } else {
+      for (let i = 0; i < nCols - 1; i++) {
+        for (let j = i + 1; j < nCols; j++) {
+          for (let row = 0; row < nSequences; row++) {
+            const fromVal = data[row]![i];
+            const toVal = data[row]![j];
+            if (isNA(fromVal) || isNA(toVal)) continue;
+            const fi = stateToIdx.get(fromVal!);
+            const ti = stateToIdx.get(toVal!);
+            if (fi !== undefined && ti !== undefined) {
+              trans[row]!.set(fi, ti, trans[row]!.get(fi, ti) + 1);
+              if (fi !== ti) {
+                trans[row]!.set(ti, fi, trans[row]!.get(ti, fi) + 1);
+              }
             }
           }
         }
