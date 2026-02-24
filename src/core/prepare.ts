@@ -104,6 +104,17 @@ export function prepareData(
 /**
  * Convert one-hot encoded data into wide-format sequence data.
  *
+ * Matches R's import_onehot() from the tna package (dev branch).
+ *
+ * Two-level windowing hierarchy:
+ *   - windowSize (R's window_size): rows per sub-window (default 1).
+ *   - interval   (R's interval):    sub-windows per output sequence
+ *                                   (default = all sub-windows in one sequence).
+ *
+ * With windowSize=1, interval=3: every 3 consecutive rows form one output
+ * sequence, within which each row is treated as its own co-occurrence window.
+ * This matches R's default when window_size=1 and interval=3.
+ *
  * @param data - Array of records with 0/1 values for each column
  * @param cols - Column names that are one-hot encoded state indicators
  * @param options - windowing options
@@ -115,7 +126,10 @@ export function importOnehot(
   options?: {
     actor?: string;
     session?: string;
+    /** R's window_size: rows per sub-window (default 1). */
     windowSize?: number;
+    /** R's interval: sub-windows per output sequence (default = all sub-windows). */
+    interval?: number;
     windowType?: 'tumbling' | 'sliding';
     aggregate?: boolean;
   },
@@ -148,21 +162,24 @@ export function importOnehot(
     groups.push(decoded);
   }
 
-  // Process each group into one flattened row
+  // Process each group into interval-grouped output sequences
   const result: (string | null)[][] = [];
 
   for (const groupRows of groups) {
     const nRows = groupRows.length;
-    const rowValues: (string | null)[] = [];
+
+    // ── Step 1: Build all sub-windows for this group ──────────────────────
+    // Each sub-window is an array of (string | null) values (flattened cols).
+    const allWindows: (string | null)[][] = [];
 
     if (windowType === 'sliding') {
       // R's sliding window: iterative lag expansion per column,
-      // then remove first row. Each remaining row is a window.
+      // then remove first row. Each remaining row becomes one window.
       const active: boolean[][] = cols.map((_, c) =>
         Array.from({ length: nRows }, (__, r) => groupRows[r]![c] !== null),
       );
 
-      // R's seq(1, ws-1) for ws=1 gives c(1,0) — always applies lag(1).
+      // R: seq(1, ws-1) for ws=1 gives c(1,0) — always applies lag(1).
       const maxW = Math.max(windowSize, 2);
       for (let w = 1; w < maxW; w++) {
         for (let c = 0; c < cols.length; c++) {
@@ -173,24 +190,22 @@ export function importOnehot(
         }
       }
 
-      // Remove first row; each remaining row is a window
+      // Each remaining row (after first) is a window of ncols entries
       for (let r = 1; r < nRows; r++) {
+        const windowVals: (string | null)[] = [];
         for (let c = 0; c < cols.length; c++) {
-          rowValues.push(active[c]![r] ? cols[c]! : null);
+          windowVals.push(active[c]![r] ? cols[c]! : null);
         }
+        allWindows.push(windowVals);
       }
     } else {
-      // Tumbling windows
-      const windows: [number, number][] = [];
+      // Tumbling windows: chunk rows into windowSize-row sub-windows
       for (let start = 0; start < nRows; start += windowSize) {
-        windows.push([start, Math.min(start + windowSize, nRows)]);
-      }
-
-      for (const [start, end] of windows) {
-        const windowRows = groupRows.slice(start, end);
+        const windowRows = groupRows.slice(start, Math.min(start + windowSize, nRows));
+        const windowVals: (string | null)[] = [];
 
         if (aggregate) {
-          // One slot per column: first non-null value
+          // One slot per column: first non-null value in the sub-window
           for (let c = 0; c < cols.length; c++) {
             let firstVal: string | null = null;
             for (const r of windowRows) {
@@ -199,20 +214,41 @@ export function importOnehot(
                 break;
               }
             }
-            rowValues.push(firstVal);
+            windowVals.push(firstVal);
           }
         } else {
-          // Tumbling without aggregate: expand all rows x cols
+          // Expand all rows × cols within this sub-window
           for (const r of windowRows) {
             for (let c = 0; c < cols.length; c++) {
-              rowValues.push(r[c]!);
+              windowVals.push(r[c]!);
             }
           }
         }
+        allWindows.push(windowVals);
       }
     }
 
-    result.push(rowValues);
+    // ── Step 2: Group sub-windows by interval into output sequences ────────
+    // R: .window_grp = .window %/% interval  →  every `interval` windows = one row
+    // Default (no interval specified): all windows in one sequence (R's default of
+    // ncol*nrow effectively puts all windows in one group for typical datasets).
+    const effectiveInterval = options?.interval ?? allWindows.length;
+    const safeInterval = Math.max(1, effectiveInterval);
+
+    if (allWindows.length === 0) {
+      // Empty group: preserve structure with one empty sequence
+      result.push([]);
+    } else {
+      const nGroups = Math.ceil(allWindows.length / safeInterval);
+      for (let g = 0; g < nGroups; g++) {
+        const groupWindows = allWindows.slice(g * safeInterval, (g + 1) * safeInterval);
+        const rowValues: (string | null)[] = [];
+        for (const w of groupWindows) {
+          for (const v of w) rowValues.push(v);
+        }
+        result.push(rowValues);
+      }
+    }
   }
 
   // R: window_size attr = window_size^(!aggregate) → ws when not aggregate, 1 when aggregate
