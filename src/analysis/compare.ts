@@ -1,9 +1,10 @@
 /**
- * Compare sequential patterns across groups.
+ * Compare sequential patterns across groups + model comparison.
  * Port of Python tna/compare.py
  */
-import type { GroupTNA, CompareRow, SequenceData } from '../core/types.js';
+import type { TNA, GroupTNA, CompareRow, SequenceData } from '../core/types.js';
 import { SeededRNG } from '../core/rng.js';
+import { compareWeightMatrices } from './reliability.js';
 
 /**
  * Compare subsequence patterns across groups.
@@ -413,4 +414,12 @@ function pAdjust(p: Float64Array, method: string): Float64Array {
   }
 
   throw new Error(`Unknown p-value adjustment method: ${method}`);
+}
+
+/**
+ * Compare two TNA models using 22 reliability metrics.
+ * Wraps compareWeightMatrices as a first-class export.
+ */
+export function compareModels(a: TNA, b: TNA): Record<string, number> {
+  return compareWeightMatrices(a, b);
 }

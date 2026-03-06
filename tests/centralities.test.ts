@@ -14,8 +14,8 @@ describe('centralities', () => {
   const model = tna(smallData);
   const result = centralities(model);
 
-  it('returns all 9 measures by default', () => {
-    expect(Object.keys(result.measures).length).toBe(9);
+  it('returns all 10 measures by default', () => {
+    expect(Object.keys(result.measures).length).toBe(10);
     for (const m of AVAILABLE_MEASURES) {
       expect(result.measures[m]).toBeDefined();
     }

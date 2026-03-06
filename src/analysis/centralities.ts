@@ -12,6 +12,7 @@ import { isGroupTNA, groupEntries } from '../core/group.js';
 export const AVAILABLE_MEASURES: CentralityMeasure[] = [
   'OutStrength', 'InStrength', 'ClosenessIn', 'ClosenessOut',
   'Closeness', 'Betweenness', 'BetweennessRSP', 'Diffusion', 'Clustering',
+  'PageRank',
 ];
 
 /**
@@ -101,6 +102,9 @@ export function centralities(
         break;
       case 'Clustering':
         measures.Clustering = clustering(weights);
+        break;
+      case 'PageRank':
+        measures.PageRank = pageRank(weights);
         break;
     }
   }
@@ -428,6 +432,57 @@ function clustering(weights: Matrix): Float64Array {
     result[i] = den !== 0 ? num[i]! / den : 0;
   }
 
+  return result;
+}
+
+// ---- PageRank (power iteration, port of psychaj) ----
+
+function pageRank(weights: Matrix, damping = 0.85, maxIter = 100, tol = 1e-8): Float64Array {
+  const n = weights.rows;
+  const result = new Float64Array(n);
+  if (n === 0) return result;
+
+  // outDeg[i] = sum of outgoing weights from node i (excluding self-loops)
+  const outDeg = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i !== j) outDeg[i]! += weights.get(i, j);
+    }
+  }
+
+  let pr = new Float64Array(n).fill(1 / n);
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const newPr = new Float64Array(n).fill((1 - damping) / n);
+
+    // Dangling node contribution
+    let danglingSum = 0;
+    for (let i = 0; i < n; i++) {
+      if (outDeg[i]! <= 0) danglingSum += pr[i]!;
+    }
+    const danglingContrib = damping * danglingSum / n;
+    for (let i = 0; i < n; i++) newPr[i]! += danglingContrib;
+
+    // Standard PageRank contribution: j → i
+    for (let j = 0; j < n; j++) {
+      if (outDeg[j]! <= 0) continue;
+      for (let i = 0; i < n; i++) {
+        if (i === j) continue;
+        const w = weights.get(j, i);
+        if (w > 0) {
+          newPr[i]! += damping * pr[j]! * w / outDeg[j]!;
+        }
+      }
+    }
+
+    // Check convergence
+    let diff = 0;
+    for (let i = 0; i < n; i++) diff += Math.abs(newPr[i]! - pr[i]!);
+    pr = newPr;
+    if (diff < tol) break;
+  }
+
+  for (let i = 0; i < n; i++) result[i] = pr[i]!;
   return result;
 }
 

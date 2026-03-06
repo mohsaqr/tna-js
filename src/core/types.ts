@@ -97,7 +97,8 @@ export type CentralityMeasure =
   | 'Betweenness'
   | 'BetweennessRSP'
   | 'Diffusion'
-  | 'Clustering';
+  | 'Clustering'
+  | 'PageRank';
 
 /** Centrality result: map from state label to measure values. */
 export interface CentralityResult {

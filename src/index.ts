@@ -38,15 +38,39 @@ export {
   SeededRNG,
 } from './core/index.js';
 
+// Stats
+export {
+  spearmanCorr, spearmanCorrArr, kendallTau, distanceCorr, rvCoefficient, rankArray,
+  pAdjust, type PAdjustMethod,
+} from './stats/index.js';
+
 // Analysis
 export {
   centralities, betweennessNetwork, AVAILABLE_MEASURES,
-  prune,
+  prune, pruneDisparity, type PruneOptions,
   cliques,
   communities, AVAILABLE_METHODS,
-  compareSequences,
-  clusterSequences,
-  clusterData,
+  compareSequences, compareModels,
+  clusterSequences, clusterData,
+  // WTNA
+  buildWtnaMatrix, type WtnaOptions, type WtnaResult,
+  toBinaryMatrix, applyWindowing, applyIntervalWindowing,
+  computeWtnaTransitions, computeWithinWindow, rowNormalizeWtna,
+  // Bootstrap
+  bootstrapTna, bootstrapWtna,
+  type BootstrapEdge, type BootstrapResult, type BootstrapOptions, type BootstrapWtnaInput,
+  // Permutation
+  permutationTest, permutationTestWtna,
+  type EdgeStat, type PermutationResult, type PermutationOptions, type PermutationWtnaInput,
+  // Stability
+  estimateCS, estimateCsWtna, estimateEdgeStability, estimateNetworkStability,
+  type StabilityResult, type StabilityOptions, type StabilityWtnaInput,
+  type EdgeStabilityResult, type NetworkStabilityResult,
+  // Reliability
+  compareWeightMatrices, reliabilityAnalysis, RELIABILITY_METRICS,
+  type MetricDef, type ReliabilityMetricSummary, type ReliabilityResult,
+  // Simulate
+  simulate, type SimulateOptions,
 } from './analysis/index.js';
 
 // Types
