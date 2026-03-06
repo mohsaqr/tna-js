@@ -46,12 +46,7 @@ function hammingDistance(
   return dist;
 }
 
-/**
- * Levenshtein edit distance.
- * Note: substitution cost is **inverted** (1 for match, 0 for mismatch)
- * to replicate R TNA's internal `levenshtein_dist` C function which uses
- * `cost = 0L + 1L * (x[i] == y[j])`.
- */
+/** Standard Levenshtein edit distance (matches R stringdist). */
 function levenshteinDistance(a: string[], b: string[], lenA?: number, lenB?: number): number {
   const m = lenA ?? a.length;
   const n = lenB ?? b.length;
@@ -61,8 +56,7 @@ function levenshteinDistance(a: string[], b: string[], lenA?: number, lenB?: num
   for (let i = 1; i <= m; i++) {
     curr[0] = i;
     for (let j = 1; j <= n; j++) {
-      // R TNA inverted cost: match=1, mismatch=0
-      const cost = a[i - 1] === b[j - 1] ? 1 : 0;
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       curr[j] = Math.min(
         prev[j]! + 1,
         curr[j - 1]! + 1,
@@ -74,11 +68,7 @@ function levenshteinDistance(a: string[], b: string[], lenA?: number, lenB?: num
   return prev[n]!;
 }
 
-/**
- * Optimal String Alignment distance.
- * Note: substitution/transposition cost is **inverted** (1 for match, 0 for
- * mismatch) to replicate R TNA's internal `osa_dist` C function.
- */
+/** Optimal String Alignment distance (matches R stringdist). */
 function osaDistance(a: string[], b: string[], lenA?: number, lenB?: number): number {
   const m = lenA ?? a.length;
   const n = lenB ?? b.length;
@@ -91,15 +81,14 @@ function osaDistance(a: string[], b: string[], lenA?: number, lenB?: number): nu
 
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      // R TNA inverted cost: match=1, mismatch=0
-      const cost = a[i - 1] === b[j - 1] ? 1 : 0;
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       d[i]![j] = Math.min(
         d[i - 1]![j]! + 1,
         d[i]![j - 1]! + 1,
         d[i - 1]![j - 1]! + cost,
       );
       if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + cost);
+        d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + 1);
       }
     }
   }
@@ -166,7 +155,7 @@ function lcsDistance(a: string[], b: string[], lenA?: number, lenB?: number): nu
     }
     [prev, curr] = [curr, new Array(n + 1).fill(0)];
   }
-  return Math.max(m, n) - prev[n]!;
+  return m + n - 2 * prev[n]!;
 }
 
 /** Build q-gram frequency profile (default q=1 = unigrams, matching R). */
